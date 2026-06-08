@@ -1,0 +1,29 @@
+{
+  "type": "module",
+  "bin": {
+    "swagger-mcp": "./build/server.js"
+  },
+  "scripts": {
+    "start": "node ./node_modules/tsx/dist/cli.mjs src/server.ts",
+    "inspector": "npx @modelcontextprotocol/inspector node ./node_modules/tsx/dist/cli.mjs src/server.ts"
+  },
+  "files": [
+    "build"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "nodemon": "^3.1.11",
+    "tsx": "^4.20.6",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "dotenv": "^17.2.3",
+    "zod": "^3.23.0"
+  },
+  "overrides": {
+    "@tootallnate/once": "3.0.1",
+    "tar": "7.5.15",
+    "undici": "6.24.0"
+  }
+}
