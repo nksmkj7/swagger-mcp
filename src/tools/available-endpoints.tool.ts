@@ -5,7 +5,7 @@ import {
     getProjectState,
     PROJECT_NOT_SET_MESSAGE,
 } from "../state/project.state";
-import { listGroupedEndpointsFromDoc } from "../utility/swagger.utility";
+import { extractEndpointsFromSpec, groupEndpointsByTag, loadOpenApiFromPath } from "../utility/swagger.utility";
 
 export const availableApiEndpointsTool: ToolCharacteristics<
     Record<string, never>,
@@ -26,7 +26,8 @@ export const availableApiEndpointsTool: ToolCharacteristics<
             return { error: PROJECT_NOT_SET_MESSAGE };
         }
 
-        const groups = await listGroupedEndpointsFromDoc();
+        const spec = await loadOpenApiFromPath(project.savedPath);
+        const groups = groupEndpointsByTag(extractEndpointsFromSpec(spec));
         const totalEndpoints = Object.values(groups).reduce(
             (sum, endpoints) => sum + endpoints.length,
             0,

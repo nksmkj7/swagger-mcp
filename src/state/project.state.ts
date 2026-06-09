@@ -4,87 +4,162 @@ import { fileURLToPath } from "url";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ProjectState = {
+export type ProjectEntry = {
     projectName: string;
     jsonUrl: string;
+    /** Absolute path to the saved OpenAPI JSON file on disk */
+    savedPath: string;
+    savedAt: string;
 };
 
-type MutableProjectState = {
-    projectName: string | null;
-    jsonUrl: string | null;
+export type ProjectConfig = {
+    activeProject: string;
+    projects: Record<string, ProjectEntry>;
 };
+
+// Keep old single-project shape around for migration detection only
+type LegacyConfig = {
+    projectName: string;
+    jsonUrl: string;
+    savedAt?: string;
+};
+
+// Backward-compat alias used by callers that only need name + url
+export type ProjectState = Pick<ProjectEntry, "projectName" | "jsonUrl" | "savedPath">;
 
 // ─── Config file ──────────────────────────────────────────────────────────────
 
-// Anchor to the project root using the file's own location (immune to cwd changes
-// when the server is spawned by Claude Desktop or other external processes).
 const PROJECT_ROOT = path.resolve(fileURLToPath(import.meta.url), "../../..");
 const CONFIG_PATH = path.join(PROJECT_ROOT, "doc", ".project-config.json");
 
 // ─── In-memory state ──────────────────────────────────────────────────────────
 
-const state: MutableProjectState = {
-    projectName: null,
-    jsonUrl: null,
-};
+let config: ProjectConfig | null = null;
 
-// ─── Getters / setters ────────────────────────────────────────────────────────
+// ─── Internal helpers ─────────────────────────────────────────────────────────
 
-export function setProjectState(projectName: string, jsonUrl: string): void {
-    state.projectName = projectName;
-    state.jsonUrl = jsonUrl;
+function isLegacyConfig(v: unknown): v is LegacyConfig {
+    return (
+        typeof v === "object" &&
+        v !== null &&
+        "projectName" in v &&
+        "jsonUrl" in v &&
+        !("projects" in v)
+    );
 }
 
+function isProjectConfig(v: unknown): v is ProjectConfig {
+    return (
+        typeof v === "object" &&
+        v !== null &&
+        "activeProject" in v &&
+        "projects" in v &&
+        typeof (v as ProjectConfig).activeProject === "string" &&
+        typeof (v as ProjectConfig).projects === "object"
+    );
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Adds or updates a project entry and marks it as the active project.
+ * Called after a successful generate-swagger-json.
+ */
+export function setProjectState(
+    projectName: string,
+    jsonUrl: string,
+    savedPath: string,
+): void {
+    if (!config) {
+        config = { activeProject: projectName, projects: {} };
+    }
+    config.projects[projectName] = {
+        projectName,
+        jsonUrl,
+        savedPath,
+        savedAt: new Date().toISOString(),
+    };
+    config.activeProject = projectName;
+}
+
+/**
+ * Returns the currently active project entry, or null if nothing is configured.
+ */
 export function getProjectState(): ProjectState | null {
-    if (!state.projectName || !state.jsonUrl) return null;
-    return { projectName: state.projectName, jsonUrl: state.jsonUrl };
+    if (!config) return null;
+    const entry = config.projects[config.activeProject];
+    if (!entry) return null;
+    return { projectName: entry.projectName, jsonUrl: entry.jsonUrl, savedPath: entry.savedPath };
+}
+
+/**
+ * Returns all registered projects as an array, marking which is active.
+ */
+export function getAllProjects(): Array<ProjectEntry & { isActive: boolean }> {
+    if (!config) return [];
+    return Object.values(config.projects).map((p) => ({
+        ...p,
+        isActive: p.projectName === config!.activeProject,
+    }));
+}
+
+/**
+ * Switches the active project to `projectName`.
+ * Returns false if the project is not registered.
+ */
+export function switchProject(projectName: string): boolean {
+    if (!config) return false;
+    if (!config.projects[projectName]) return false;
+    config.activeProject = projectName;
+    return true;
 }
 
 export function isProjectStateSet(): boolean {
-    return state.projectName !== null && state.jsonUrl !== null;
+    return getProjectState() !== null;
 }
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
-/**
- * Writes the current in-memory state to doc/.project-config.json.
- * Called after a successful generate-swagger-json so the config survives restarts.
- */
 export async function persistProjectState(): Promise<void> {
-    const project = getProjectState();
-    if (!project) return;
-
+    if (!config) return;
     await mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-    await writeFile(
-        CONFIG_PATH,
-        JSON.stringify({ ...project, savedAt: new Date().toISOString() }, null, 2),
-        "utf-8",
-    );
+    await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), "utf-8");
 }
 
 /**
- * Reads doc/.project-config.json on server startup and restores the state.
- * Returns the loaded state if found and valid, or null if not configured yet.
+ * Reads doc/.project-config.json on server startup.
+ * Handles both the new multi-project format and the legacy single-project format.
+ * Returns the active ProjectEntry, or null if nothing is configured.
  */
 export async function loadProjectStateFromFile(): Promise<ProjectState | null> {
     try {
         const raw = await readFile(CONFIG_PATH, "utf-8");
         const parsed = JSON.parse(raw) as unknown;
 
-        if (
-            parsed &&
-            typeof parsed === "object" &&
-            typeof (parsed as Record<string, unknown>)["projectName"] === "string" &&
-            typeof (parsed as Record<string, unknown>)["jsonUrl"] === "string"
-        ) {
-            const { projectName, jsonUrl } = parsed as ProjectState;
-            setProjectState(projectName, jsonUrl);
-            return { projectName, jsonUrl };
+        if (isProjectConfig(parsed)) {
+            config = parsed;
+            return getProjectState();
+        }
+
+        // Migrate legacy single-project format
+        if (isLegacyConfig(parsed)) {
+            const entry: ProjectEntry = {
+                projectName: parsed.projectName,
+                jsonUrl: parsed.jsonUrl,
+                savedPath: "",  // unknown — will fallback to latest-file scan
+                savedAt: parsed.savedAt ?? new Date().toISOString(),
+            };
+            config = {
+                activeProject: parsed.projectName,
+                projects: { [parsed.projectName]: entry },
+            };
+            // Persist the migrated format immediately
+            await persistProjectState();
+            return getProjectState();
         }
 
         return null;
     } catch {
-        // File doesn't exist or is malformed — treat as unconfigured
         return null;
     }
 }
@@ -92,5 +167,5 @@ export async function loadProjectStateFromFile(): Promise<ProjectState | null> {
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
 export const PROJECT_NOT_SET_MESSAGE =
-    "Project is not initialised. Please run the 'generate-swagger-json' tool " +
-    "with a projectName and swaggerUrl to get started.";
+    "No active project. Use 'list-projects' to see registered projects, " +
+    "'switch-project' to activate one, or 'generate-swagger-json' to add a new one.";

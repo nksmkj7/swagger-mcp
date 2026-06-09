@@ -47,7 +47,8 @@ The server runs over **stdio transport** (standard input/output), which is the n
 | **cURL generation** | Executable `curl` commands with placeholder values derived from the schema |
 | **TypeScript types** | Generates `interface` or `type` aliases for request/response shapes |
 | **Guided prompts** | Step-by-step AI workflow prompts for setup, exploration, implementation, and testing |
-| **Persistent state** | Remembers your last project across server restarts |
+| **Multi-project support** | Register multiple API projects and switch between them instantly |
+| **Persistent state** | Remembers all registered projects and the active one across server restarts |
 
 ---
 
@@ -73,11 +74,16 @@ AI Client (Cursor / Claude Desktop)
 1. Call `generate-swagger-json` with a `projectName` and `swaggerUrl`
 2. Server fetches the JSON spec, validates it, and saves it under `doc/`
 3. A grouped summary (`-grouped.json`) is also saved for fast browsing
-4. Active project state is persisted so the server restores it on restart
+4. The project is added to `doc/.project-config.json` and set as active
 
 ### Subsequent calls
-- All other tools read from the cached spec — no network calls needed
+- All other tools read from the cached spec for the active project — no network calls needed
 - State is restored automatically from `doc/.project-config.json` on server start
+
+### Multi-project flow
+- Register as many projects as you need — each call to `generate-swagger-json` adds a new entry
+- Use `list-projects` to see all registered projects and which is active
+- Use `switch-project` to change the active project — all tools immediately use the new project's spec
 
 ---
 
@@ -280,6 +286,35 @@ Generate swagger JSON for projectName "myapi" and swaggerUrl "https://api.exampl
 
 ---
 
+### `list-projects`
+
+Lists all API projects that have been registered via `generate-swagger-json`.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| *(none)* | — | — | — |
+
+**Returns:** All projects with their name, JSON URL, saved spec path, registration date, and which is currently active.
+
+---
+
+### `switch-project`
+
+Switches the active API project. All subsequent tool calls will use the newly activated project's spec.
+
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `projectName` | string | Yes | The name of the project to activate (must already be registered) |
+
+**Returns:** Confirmation with the new active project's details.
+
+**Example:**
+```
+Switch to project "medex"
+```
+
+---
+
 ### `available-api-endpoints`
 
 Lists all API endpoints grouped by OpenAPI tag.
@@ -400,6 +435,24 @@ Use the setup-project prompt
 
 The AI will ask for your project name and Swagger JSON URL, then load and cache the spec.
 
+### 1b. Register additional projects (optional)
+
+```
+Generate swagger JSON for projectName "payments-api" and swaggerUrl "https://pay.example.com/api-docs-json"
+```
+
+Each call to `generate-swagger-json` adds a new project without removing existing ones.
+
+### 1c. Switch between projects
+
+```
+List all my registered projects
+```
+
+```
+Switch to project "payments-api"
+```
+
 ### 2. Explore the API
 
 ```
@@ -448,6 +501,8 @@ swagger/
 │   │   └── openapi.types.ts             # OpenAPI spec types + type guard
 │   ├── tools/
 │   │   ├── generate-swagger-json.tool.ts
+│   │   ├── list-projects.tool.ts
+│   │   ├── switch-project.tool.ts
 │   │   ├── available-endpoints.tool.ts
 │   │   ├── endpoint-detail.tool.ts
 │   │   ├── generate-curl.tool.ts
@@ -467,8 +522,8 @@ swagger/
 │       ├── add-prompt-registry.utility.ts
 │       └── swagger.utility.ts           # Fetch, save, load, parse OpenAPI specs
 ├── doc/
-│   ├── .project-config.json             # Persisted active project state
-│   └── *.json                           # Cached OpenAPI specs + grouped summaries
+│   ├── .project-config.json             # Multi-project registry + active project pointer
+│   └── *.json                           # Cached OpenAPI specs + grouped summaries (gitignored)
 ├── .env.sample                          # Environment variable template
 ├── package.json
 └── tsconfig.json
@@ -507,7 +562,11 @@ The `swaggerUrl` must point to the **raw JSON spec**, not the Swagger UI page. I
 
 ### Tools return "No project configured"
 
-Run `generate-swagger-json` first to initialize the project. The server needs an active project before any other tool can run.
+Run `generate-swagger-json` first to initialize a project. Once registered, use `list-projects` to confirm it appears, and `switch-project` to activate it if needed.
+
+### Tools are querying the wrong API
+
+You may have multiple projects registered. Call `list-projects` to check which project is currently active, then call `switch-project` with the correct name.
 
 ### State is lost after restart
 

@@ -3,7 +3,7 @@ import { ToolCharacteristics } from "../types";
 import { getEndpointDetail } from "../helpers/endpoint-detail.helper";
 import { buildCurl } from "../helpers/curl-builder.helper";
 import { getProjectState, PROJECT_NOT_SET_MESSAGE } from "../state/project.state";
-import { loadLatestOpenApiFromDoc } from "../utility/swagger.utility";
+import { loadOpenApiFromPath } from "../utility/swagger.utility";
 
 export const generateCurlTool: ToolCharacteristics<
     {
@@ -69,7 +69,7 @@ export const generateCurlTool: ToolCharacteristics<
         // Derive base URL from the saved jsonUrl origin when not supplied
         const resolvedBaseUrl = baseUrl ?? new URL(project.jsonUrl).origin;
 
-        const spec = await loadLatestOpenApiFromDoc();
+        const spec = await loadOpenApiFromPath(project.savedPath);
         const result = getEndpointDetail(spec, searchPath, method);
 
         if (!result.found) {

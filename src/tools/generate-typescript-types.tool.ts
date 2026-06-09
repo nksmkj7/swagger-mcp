@@ -7,7 +7,7 @@ import {
     type OutputStyle,
 } from "../helpers/typescript-type-builder.helper";
 import { getProjectState, PROJECT_NOT_SET_MESSAGE } from "../state/project.state";
-import { loadLatestOpenApiFromDoc } from "../utility/swagger.utility";
+import { loadOpenApiFromPath } from "../utility/swagger.utility";
 
 const VALID_PARTS: GeneratePart[] = [
     "requestBody",
@@ -74,7 +74,7 @@ export const generateTypescriptTypesTool: ToolCharacteristics<
             return { error: PROJECT_NOT_SET_MESSAGE };
         }
 
-        const spec = await loadLatestOpenApiFromDoc();
+        const spec = await loadOpenApiFromPath(project.savedPath);
         const result = getEndpointDetail(spec, searchPath, method);
 
         if (!result.found) {

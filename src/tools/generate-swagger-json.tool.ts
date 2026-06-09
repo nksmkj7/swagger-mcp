@@ -51,7 +51,7 @@ export const generateSwaggerJsonTool: ToolCharacteristics<
         const { spec, savedPath, groupedPath, jsonUrl } =
             await fetchAndSaveOpenApiToDoc(swaggerUrl);
 
-        setProjectState(projectName, jsonUrl);
+        setProjectState(projectName, jsonUrl, savedPath);
         await persistProjectState();
 
         const paths = spec.paths as Record<string, unknown> | undefined;

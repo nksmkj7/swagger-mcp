@@ -6,6 +6,8 @@ import endpointDetailTool from "./tools/endpoint-detail.tool";
 import generateCurlTool from "./tools/generate-curl.tool";
 import generateSwaggerJsonTool from "./tools/generate-swagger-json.tool";
 import generateTypescriptTypesTool from "./tools/generate-typescript-types.tool";
+import listProjectsTool from "./tools/list-projects.tool";
+import switchProjectTool from "./tools/switch-project.tool";
 import { addToolRegistry } from "./utility/add-tool-registry.utility";
 import { addPromptRegistry } from "./utility/add-prompt-registry.utility";
 import { getProjectState, loadProjectStateFromFile } from "./state/project.state";
@@ -64,6 +66,8 @@ async function main() {
     );
 
     addToolRegistry(server, generateSwaggerJsonTool);
+    addToolRegistry(server, listProjectsTool);
+    addToolRegistry(server, switchProjectTool);
     addToolRegistry(server, availableApiEndpointsTool);
     addToolRegistry(server, endpointDetailTool);
     addToolRegistry(server, generateCurlTool);
@@ -80,7 +84,9 @@ async function main() {
 
     const loaded = await loadProjectStateFromFile();
     if (loaded) {
-        console.error(`[Server] Restored project "${loaded.projectName}" from config | JSON URL: ${loaded.jsonUrl}`);
+        const { getAllProjects } = await import("./state/project.state");
+        const all = getAllProjects();
+        console.error(`[Server] Active project: "${loaded.projectName}" | ${all.length} project(s) registered`);
     } else {
         console.error("[Server] No saved project config found. Call 'generate-swagger-json' with a projectName and swaggerUrl to get started.");
     }

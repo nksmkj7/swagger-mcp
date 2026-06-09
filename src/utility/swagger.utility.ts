@@ -185,7 +185,7 @@ export async function saveGroupedEndpointsToDoc(
 export async function loadLatestOpenApiFromDoc(): Promise<OpenApiSpec> {
     await mkdir(DOC_DIR, { recursive: true });
     const files = (await readdir(DOC_DIR))
-        .filter((f) => f.endsWith(".json") && !f.endsWith("-grouped.json"))
+        .filter((f) => f.endsWith(".json") && !f.endsWith("-grouped.json") && f !== ".project-config.json")
         .sort();
 
     if (files.length === 0) {
@@ -201,6 +201,39 @@ export async function loadLatestOpenApiFromDoc(): Promise<OpenApiSpec> {
         throw new Error(`Invalid OpenAPI document: doc/${latest}`);
     }
     return spec;
+}
+
+/**
+ * Loads the OpenAPI spec for a specific project by its saved file path.
+ * Falls back to loadLatestOpenApiFromDoc() when savedPath is empty (migrated legacy projects).
+ */
+export async function loadOpenApiFromPath(savedPath: string): Promise<OpenApiSpec> {
+    if (!savedPath) {
+        return loadLatestOpenApiFromDoc();
+    }
+    try {
+        const raw = await readFile(savedPath, "utf-8");
+        const spec = JSON.parse(raw) as unknown;
+        if (!isOpenApiSpec(spec)) {
+            throw new Error(`Invalid OpenAPI document at: ${savedPath}`);
+        }
+        return spec;
+    } catch (err: unknown) {
+        const isNotFound =
+            typeof err === "object" &&
+            err !== null &&
+            "code" in err &&
+            (err as NodeJS.ErrnoException).code === "ENOENT";
+
+        if (isNotFound) {
+            throw new Error(
+                `Spec file not found: ${savedPath}\n` +
+                `The project may have been set up on a different machine. ` +
+                `Run "generate-swagger-json" again to re-download the spec.`,
+            );
+        }
+        throw err;
+    }
 }
 
 export async function listGroupedEndpointsFromDoc(): Promise<GroupedEndpoints> {
