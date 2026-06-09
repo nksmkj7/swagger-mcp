@@ -10,7 +10,7 @@ import listProjectsTool from "./tools/list-projects.tool";
 import switchProjectTool from "./tools/switch-project.tool";
 import { addToolRegistry } from "./utility/add-tool-registry.utility";
 import { addPromptRegistry } from "./utility/add-prompt-registry.utility";
-import { getProjectState, loadProjectStateFromFile } from "./state/project.state";
+import { loadProjectStateFromFile } from "./state/project.state";
 import setupProjectPrompt from "./prompts/setup-project.prompt";
 import exploreApiPrompt from "./prompts/explore-api.prompt";
 import implementEndpointPrompt from "./prompts/implement-endpoint.prompt";
